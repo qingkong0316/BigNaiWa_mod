@@ -1,0 +1,55 @@
+name: Enable GitHub Pages
+
+# One-shot: the cloud agent token cannot call the Pages API (needs pages:write).
+# This workflow uses GITHUB_TOKEN to publish the static site from main /.
+on:
+  push:
+    branches:
+      - cursor/enable-github-pages-18fe
+
+permissions:
+  pages: write
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure Pages source to main /
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository }}"
+          payload='{"build_type":"legacy","source":{"branch":"main","path":"/"}}'
+
+          echo "POST /repos/${repo}/pages"
+          set +e
+          post_out="$(gh api --method POST "repos/${repo}/pages" --input - -i <<< "${payload}" 2>&1)"
+          post_ec=$?
+          set -e
+          printf '%s\n' "${post_out}"
+          post_code="$(printf '%s\n' "${post_out}" | awk 'BEGIN{c=0} /^HTTP/{c=$2} END{print c}')"
+          echo "POST status: ${post_code} (exit ${post_ec})"
+
+          if [ "${post_code}" = "201" ] || [ "${post_code}" = "200" ]; then
+            echo "Pages site created"
+          elif [ "${post_code}" = "409" ] || [ "${post_code}" = "422" ]; then
+            echo "POST did not create a site; trying PUT"
+            set +e
+            put_out="$(gh api --method PUT "repos/${repo}/pages" --input - -i <<< "${payload}" 2>&1)"
+            put_ec=$?
+            set -e
+            printf '%s\n' "${put_out}"
+            put_code="$(printf '%s\n' "${put_out}" | awk 'BEGIN{c=0} /^HTTP/{c=$2} END{print c}')"
+            echo "PUT status: ${put_code} (exit ${put_ec})"
+            if [ "${put_code}" != "204" ] && [ "${put_code}" != "200" ] && [ "${put_code}" != "201" ]; then
+              echo "PUT failed"
+              exit 1
+            fi
+          else
+            echo "POST failed"
+            exit 1
+          fi
+
+          echo "GET /repos/${repo}/pages"
+          gh api "repos/${repo}/pages"
