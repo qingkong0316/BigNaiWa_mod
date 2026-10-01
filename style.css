@@ -893,7 +893,7 @@ body {
 
 .cheat-panel {
   width: 100%;
-  max-height: min(280px, 40vh);
+  max-height: min(360px, 48vh);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   padding: 10px 10px 8px;
@@ -915,7 +915,7 @@ body {
     right: 0;
     bottom: calc(100% + 8px);
     width: auto;
-    max-height: min(320px, 52vh);
+    max-height: min(420px, 62vh);
   }
 }
 
@@ -999,7 +999,7 @@ body {
 
   .cheat-panel {
     flex: 1 0 100%;
-    max-height: min(220px, 32vh);
+    max-height: min(280px, 40vh);
   }
 }
 
@@ -1029,7 +1029,7 @@ body {
     right: 0;
     bottom: calc(100% + 6px);
     width: auto;
-    max-height: min(200px, calc(var(--vh) - 96px));
+    max-height: min(260px, calc(var(--vh) - 96px));
   }
 }
 
