@@ -7,7 +7,7 @@
  *  玩法：相同水果接触即合成高一级水果；顶到警戒线超时判负。
  *
  *  个人改版（基于 YHSome/BigNaiWa）：
- *  局部引力 / 自选下一块 / 锁定拖动 / 暂停警戒。
+ *  局部引力 / 自选下一块 / 锁定拖动 / 点击消除 / 暂停警戒。
  *  本局一旦开过任意作弊，就不再提交原作 TinyWebDB 排行榜。
  * ============================================================ */
 (function () {
@@ -94,6 +94,7 @@
     pick: false,
     pickTier: 0,
     lockDrag: false,
+    clickEliminate: false,
     pauseDanger: false
   };
 
@@ -142,7 +143,12 @@
   }
 
   function anyCheatOn() {
-    return cheats.attract || cheats.pick || cheats.lockDrag || cheats.pauseDanger;
+    return cheats.attract || cheats.pick || cheats.lockDrag || cheats.clickEliminate || cheats.pauseDanger;
+  }
+
+  /* 锁定拖动和点击消除共用同一颗锁定目标 */
+  function pointerLockOn() {
+    return cheats.lockDrag || cheats.clickEliminate;
   }
 
   function blockLeaderboard() {
@@ -204,6 +210,7 @@
     },
 
     drop()   { this.tone(180, 120, 0.08, 0.05, 'sine'); },
+    pop()    { this.tone(640, 220, 0.1, 0.07, 'triangle'); },
     over()   { this.tone(420, 90, 0.7, 0.16, 'sawtooth'); },
     bonus()  { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, f, 0.22, 0.12, 'triangle'), i * 90)); }
   };
@@ -463,7 +470,9 @@
 
           if (minGap > MERGE_PAD || minGap === 1e9) continue;
 
-          if (a.tier === b.tier && it === 0) {
+          /* 等着被点掉的那颗先别合成掉，否则第二下点不到它 */
+          const holdForRemove = cheats.clickEliminate && (a === lockedBall || b === lockedBall);
+          if (!holdForRemove && a.tier === b.tier && it === 0) {
             a.dead = true;
             b.dead = true;
             merges.push([a, b]);
@@ -740,7 +749,9 @@
         /* 只有「卡在线上方且基本停住」才计时：
            被弹起来、正在飞过线的不算，免得误判 */
         if (b.vx * b.vx + b.vy * b.vy < REST_SPEED2) {
-          if (!cheats.pauseDanger) {
+          /* 点选准备消除时，这颗先停住等第二下，不要在点掉之前判负 */
+          const waitingRemove = cheats.clickEliminate && b === lockedBall;
+          if (!cheats.pauseDanger && !waitingRemove) {
             b.overTime += dt;
             if (b.overTime > OVER_LIMIT) { gameOver(); return; }
           }
@@ -782,18 +793,47 @@
     }
   }
 
+  function releaseHold(b) {
+    if (!b || b.dead) return;
+    b.held = false;
+    b.invMass = 1 / b.mass;
+    b.vx = 0;
+    b.vy = 0;
+    b.px = b.x;
+    b.py = b.y;
+  }
+
   function clearLock() {
-    if (lockedBall && !lockedBall.dead) {
-      lockedBall.held = false;
-      lockedBall.invMass = 1 / lockedBall.mass;
-      lockedBall.vx = 0;
-      lockedBall.vy = 0;
-      lockedBall.px = lockedBall.x;
-      lockedBall.py = lockedBall.y;
-    }
+    releaseHold(lockedBall);
     lockedBall = null;
     lockDrag.dragging = false;
     lockDrag.moved = false;
+    lockDrag.fromSelected = false;
+  }
+
+  /* 只拿掉这一颗，不加分。合成加分仍只走原来的 processMerges。 */
+  function eliminateLocked() {
+    const b = lockedBall;
+    lockedBall = null;
+    lockDrag.dragging = false;
+    lockDrag.moved = false;
+    lockDrag.fromSelected = false;
+    if (!b || b.dead) return;
+    const x = b.x;
+    const y = b.y;
+    const tier = b.tier;
+    b.dead = true;
+    b.held = false;
+    const alive = [];
+    for (let i = 0; i < state.balls.length; i++) {
+      if (!state.balls[i].dead) alive.push(state.balls[i]);
+    }
+    state.balls = alive;
+    burst(x, y, tier, 14, 200);
+    state.floats.push({ x: x, y: y, text: '消除', life: 1 });
+    Sound.pop();
+    haptic(10);
+    state.cheatTainted = true;
   }
 
   function reset() {
@@ -1010,7 +1050,7 @@
       const shape = b.sq > 0.004 ? { a: b.sqA, k: b.sq } : null;
       drawFruit(ctx, b.x, b.y, b.r, b.tier, b.angle, scale, shape);
 
-      if (cheats.lockDrag && b === lockedBall) {
+      if (b === lockedBall && pointerLockOn()) {
         ctx.save();
         ctx.setLineDash([6, 5]);
         ctx.lineWidth = 3;
@@ -1280,12 +1320,14 @@
     }
   }
 
-  /* 返回 true 表示这次按压被「锁定拖动」吃掉，不要再投放 */
+  /* 返回 true 表示这次按压被「锁定拖动 / 点击消除」吃掉，不要再投放。
+     两个都开时共用 lockedBall：拖动仍挪位；没拖动的第二下改为消除。 */
   function handleLockDown(e) {
-    if (!cheats.lockDrag || state.over) return false;
+    if (!pointerLockOn() || state.over) return false;
     const p = pointerToXY(e);
     const hit = hitBall(p.x, p.y);
     if (hit) {
+      if (lockedBall && lockedBall !== hit) releaseHold(lockedBall);
       lockDrag.fromSelected = (lockedBall === hit);
       lockDrag.moved = false;
       lockDrag.dragging = true;
@@ -1295,6 +1337,7 @@
       lockDrag.oy = p.y - hit.y;
       lockedBall = hit;
       pinBall(hit, hit.x, hit.y);
+      if (cheats.clickEliminate) state.cheatTainted = true;
       capturePointer(e);
       return true;
     }
@@ -1306,20 +1349,27 @@
   }
 
   function handleLockMove(e) {
-    if (!cheats.lockDrag || !lockDrag.dragging || !lockedBall || lockedBall.dead) return false;
+    if (!lockDrag.dragging || !lockedBall || lockedBall.dead) return false;
     const p = pointerToXY(e);
     const dx = p.x - lockDrag.sx;
     const dy = p.y - lockDrag.sy;
     if (dx * dx + dy * dy > 16) lockDrag.moved = true;
-    if (lockDrag.moved) pinBall(lockedBall, p.x - lockDrag.ox, p.y - lockDrag.oy);
+    if (cheats.lockDrag && lockDrag.moved) pinBall(lockedBall, p.x - lockDrag.ox, p.y - lockDrag.oy);
     return true;
   }
 
   function handleLockUp() {
     if (!lockDrag.dragging) return false;
-    const toggleOff = lockDrag.fromSelected && !lockDrag.moved;
+    const moved = lockDrag.moved;
+    const second = lockDrag.fromSelected;
     lockDrag.dragging = false;
-    if (toggleOff) clearLock();
+    /* 只开点击消除时，手指轻微滑动仍算点击；两个都开时，拖动过就不消除 */
+    const dragged = moved && cheats.lockDrag;
+    if (second && cheats.clickEliminate && !dragged) {
+      eliminateLocked();
+      return true;
+    }
+    if (second && !moved) clearLock();
     return true;
   }
 
@@ -1470,6 +1520,7 @@
       cheats.attract = !!o.attract;
       cheats.pick = !!o.pick;
       cheats.lockDrag = !!o.lockDrag;
+      cheats.clickEliminate = !!o.clickEliminate;
       cheats.pauseDanger = !!o.pauseDanger;
       const tier = o.pickTier | 0;
       if (tier >= 0 && tier <= MAX_TIER) cheats.pickTier = tier;
@@ -1483,6 +1534,7 @@
         pick: cheats.pick,
         pickTier: cheats.pickTier,
         lockDrag: cheats.lockDrag,
+        clickEliminate: cheats.clickEliminate,
         pauseDanger: cheats.pauseDanger
       }));
     } catch (e) { /* 隐私模式写不进也无所谓 */ }
@@ -1493,6 +1545,7 @@
     const panel = document.getElementById('cheatPanel');
     const pickBox = document.getElementById('cheatPickBox');
     const hint = document.getElementById('cheatLockHint');
+    const elimHint = document.getElementById('cheatEliminateHint');
     if (toggle) {
       const on = anyCheatOn();
       toggle.classList.toggle('is-on', on);
@@ -1500,7 +1553,18 @@
     }
     if (panel && toggle) toggle.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
     if (pickBox) pickBox.hidden = !cheats.pick;
-    if (hint) hint.hidden = !cheats.lockDrag;
+    if (hint) {
+      hint.hidden = !cheats.lockDrag;
+      hint.textContent = cheats.clickEliminate
+        ? '和「点击消除」共用锁定。拖动可以挪位；不再拖动时，再点同一颗会消除，而不是取消锁定。点空白取消。'
+        : '点一下棋盘上的球锁定，拖动挪位。再点同一颗，或点空白处，取消锁定。';
+    }
+    if (elimHint) {
+      elimHint.hidden = !cheats.clickEliminate;
+      elimHint.textContent = cheats.lockDrag
+        ? '第一下锁定，再点同一颗消除（不加分）。和「锁定拖动」共用这一颗，拖动仍然有效。点另一颗改锁，点空白取消。'
+        : '第一下锁定，再点同一颗消除（不加分）。点另一颗改锁，点空白取消。';
+    }
     const fruits = document.getElementById('cheatFruits');
     if (fruits) {
       const buttons = fruits.querySelectorAll('.cheat-fruit');
@@ -1536,7 +1600,7 @@
       el.checked = !!cheats[key];
       el.addEventListener('change', () => {
         cheats[key] = !!el.checked;
-        if (key === 'lockDrag' && !cheats.lockDrag) clearLock();
+        if ((key === 'lockDrag' || key === 'clickEliminate') && !pointerLockOn()) clearLock();
         if (key === 'pick' && cheats.pick) {
           state.pending = cheats.pickTier;
           state.next = cheats.pickTier;
@@ -1550,6 +1614,7 @@
     bindCheck('cheatAttract', 'attract');
     bindCheck('cheatPick', 'pick');
     bindCheck('cheatLock', 'lockDrag');
+    bindCheck('cheatEliminate', 'clickEliminate');
     bindCheck('cheatPause', 'pauseDanger');
 
     const fruits = document.getElementById('cheatFruits');

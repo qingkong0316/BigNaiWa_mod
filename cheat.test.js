@@ -1,4 +1,4 @@
-/* 作弊菜单冒烟：引力手感、自选等级、锁定拖动、暂停警戒、不提交排行榜 */
+/* 作弊菜单冒烟：引力手感、自选等级、锁定拖动、点击消除、暂停警戒、不提交排行榜 */
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = __dirname;
@@ -221,6 +221,130 @@ while (!S.over && frames < 240) {
 }
 check('关掉暂停后仍会按原规则结束', S.over === true, '帧 ' + frames);
 
+/* 点击消除：第一下锁定，再点同一颗移除且不加分；和锁定拖动共用目标 */
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const asideStart = html.indexOf('<aside class="panel">');
+const asideEnd = html.indexOf('</aside>');
+const dockAt = html.indexOf('id="cheatDock"');
+check('点击消除开关在侧栏作弊菜单里',
+  html.indexOf('点击消除') !== -1 && html.indexOf('id="cheatEliminate"') !== -1 &&
+  asideStart !== -1 && dockAt > asideStart && dockAt < asideEnd);
+
+C.attract = false;
+C.pick = false;
+C.lockDrag = false;
+C.pauseDanger = false;
+C.clickEliminate = true;
+U.reset();
+check('只开点击消除就会挡住上榜', U.blockLeaderboard() === true && S.cheatTainted === true);
+
+S.balls.length = 0;
+S.score = 0;
+const elim = U.makeBall(200, 400, 2, 0, 0);
+elim.landed = true;
+S.balls.push(elim);
+const nElim = S.balls.length;
+U.onPointerDown({ clientX: 200, clientY: 400, pointerType: 'mouse', pointerId: 31 });
+U.onPointerUp({ clientX: 200, clientY: 400, pointerType: 'mouse', pointerId: 31 });
+check('第一下锁定，不消除也不投放', S.balls.length === nElim && elim.held === true && S.score === 0);
+U.onPointerDown({ clientX: 200, clientY: 400, pointerType: 'mouse', pointerId: 32 });
+U.onPointerUp({ clientX: 200, clientY: 400, pointerType: 'mouse', pointerId: 32 });
+check('再点同一颗会移除且不加分', S.balls.indexOf(elim) === -1 && S.score === 0 && elim.dead === true);
+
+const keep = U.makeBall(120, 460, 3, 0, 0);
+const swap = U.makeBall(300, 460, 5, 0, 0);
+keep.landed = swap.landed = true;
+S.balls.push(keep, swap);
+U.onPointerDown({ clientX: 120, clientY: 460, pointerType: 'mouse', pointerId: 33 });
+U.onPointerUp({ clientX: 120, clientY: 460, pointerType: 'mouse', pointerId: 33 });
+U.onPointerDown({ clientX: 300, clientY: 460, pointerType: 'mouse', pointerId: 34 });
+U.onPointerUp({ clientX: 300, clientY: 460, pointerType: 'mouse', pointerId: 34 });
+check('点另一颗改锁，原来的不再锁定', swap.held === true && keep.held !== true && S.balls.indexOf(keep) !== -1);
+U.onPointerDown({ clientX: 40, clientY: 40, pointerType: 'mouse', pointerId: 35 });
+check('点空白取消锁定且这一下不投放', swap.held !== true && S.balls.length === 2);
+U.onPointerUp({ clientX: 40, clientY: 40, pointerType: 'mouse', pointerId: 35 });
+const nAfterClear = S.balls.length;
+U.onPointerDown({ clientX: 210, clientY: 70, pointerType: 'mouse', pointerId: 36 });
+check('取消锁定后点空白仍能投放', S.balls.length === nAfterClear + 1);
+
+/* 贴在一起的同级：锁定期间不合成，第二下只删掉被锁的那颗 */
+U.reset();
+C.clickEliminate = true;
+S.balls.length = 0;
+S.score = 0;
+const twinA = U.makeBall(200, 400, 1, 0, 0);
+const twinB = U.makeBall(230, 400, 1, 0, 0);
+twinA.landed = twinB.landed = true;
+S.balls.push(twinA, twinB);
+U.onPointerDown({ clientX: 200, clientY: 400, pointerType: 'mouse', pointerId: 37 });
+U.onPointerUp({ clientX: 200, clientY: 400, pointerType: 'mouse', pointerId: 37 });
+for (let i = 0; i < 20; i++) U.stepPhysics(1 / 60);
+check('待消除时同级不会先合成', S.balls.indexOf(twinA) !== -1 && S.balls.indexOf(twinB) !== -1 && S.score === 0,
+  '球数 ' + S.balls.length + ' 分 ' + S.score);
+U.onPointerDown({ clientX: twinA.x, clientY: twinA.y, pointerType: 'mouse', pointerId: 38 });
+U.onPointerUp({ clientX: twinA.x, clientY: twinA.y, pointerType: 'mouse', pointerId: 38 });
+check('第二下只移除被锁的那颗', S.balls.indexOf(twinA) === -1 && S.balls.indexOf(twinB) !== -1 && S.score === 0);
+
+/* 越线球：第一下锁住时不判负，第二下拿掉后对局还能玩 */
+U.reset();
+C.clickEliminate = true;
+C.pauseDanger = false;
+S.balls.length = 0;
+const lineBall = U.makeBall(210, 130, 0);
+lineBall.y = 130; lineBall.py = 130; lineBall.vy = 0; lineBall.vx = 0; lineBall.landed = true;
+S.balls.push(lineBall);
+U.onPointerDown({ clientX: 210, clientY: 130, pointerType: 'mouse', pointerId: 39 });
+U.onPointerUp({ clientX: 210, clientY: 130, pointerType: 'mouse', pointerId: 39 });
+frames = 0;
+while (!S.over && frames < 180) {
+  pump(1);
+  frames++;
+}
+check('待消除的锁定球不会先判负', S.over === false && lineBall.held === true, '帧 ' + frames);
+U.onPointerDown({ clientX: lineBall.x, clientY: lineBall.y, pointerType: 'mouse', pointerId: 40 });
+U.onPointerUp({ clientX: lineBall.x, clientY: lineBall.y, pointerType: 'mouse', pointerId: 40 });
+check('第二下消掉越线球后对局还在', S.balls.indexOf(lineBall) === -1 && S.over === false);
+pump(20);
+const nPlay = S.balls.length;
+U.onPointerDown({ clientX: 200, clientY: 80, pointerType: 'mouse', pointerId: 41 });
+check('消除之后点空白仍能投放', S.balls.length === nPlay + 1 && S.over === false);
+
+/* 两个都开：拖动不消除，再点才消除 */
+C.lockDrag = true;
+C.clickEliminate = true;
+U.reset();
+S.balls.length = 0;
+const both = U.makeBall(200, 420, 3, 0, 0);
+both.landed = true;
+S.balls.push(both);
+U.onPointerDown({ clientX: 200, clientY: 420, pointerType: 'mouse', pointerId: 42 });
+U.onPointerMove({ clientX: 260, clientY: 470, pointerType: 'mouse', pointerId: 42 });
+U.onPointerUp({ clientX: 260, clientY: 470, pointerType: 'mouse', pointerId: 42 });
+check('两个都开时拖动不会消除', S.balls.indexOf(both) !== -1 && both.held === true,
+  '位置 ' + both.x.toFixed(0) + ',' + both.y.toFixed(0));
+U.onPointerDown({ clientX: both.x, clientY: both.y, pointerType: 'mouse', pointerId: 43 });
+U.onPointerUp({ clientX: both.x, clientY: both.y, pointerType: 'mouse', pointerId: 43 });
+check('两个都开时再点同一颗会消除', S.balls.indexOf(both) === -1);
+
+/* 触屏：点球不投放，第二下消除 */
+C.lockDrag = false;
+C.clickEliminate = true;
+U.reset();
+S.balls.length = 0;
+const tapped = U.makeBall(180, 360, 2, 0, 0);
+tapped.landed = true;
+S.balls.push(tapped);
+U.onPointerDown({ clientX: 180, clientY: 360, pointerType: 'touch', pointerId: 44 });
+U.onPointerUp({ clientX: 180, clientY: 360, pointerType: 'touch', pointerId: 44 });
+check('触屏第一下锁定且不投放', S.balls.length === 1 && tapped.held === true);
+U.onPointerDown({ clientX: 180, clientY: 360, pointerType: 'touch', pointerId: 45 });
+U.onPointerMove({ clientX: 188, clientY: 368, pointerType: 'touch', pointerId: 45 });
+U.onPointerUp({ clientX: 188, clientY: 368, pointerType: 'touch', pointerId: 45 });
+check('触屏手指稍动仍会消除，且不多投一颗', S.balls.length === 0 && tapped.dead === true);
+
+C.clickEliminate = false;
+C.lockDrag = false;
+
 /* 排行榜：开过作弊就不调用提交，fetch 的 update 也被拦住 */
 submitted = 0;
 C.attract = true;
@@ -255,6 +379,7 @@ setTimeout(() => {
   C.attract = false;
   C.pick = false;
   C.lockDrag = false;
+  C.clickEliminate = false;
   C.pauseDanger = false;
   U.reset();
   check('全部关掉并重开后允许上榜', U.blockLeaderboard() === false);
