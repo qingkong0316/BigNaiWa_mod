@@ -135,6 +135,11 @@ check('不会在半秒内吸到重叠', near1 > 20, '距离 ' + near1.toFixed(1)
 check('不同等级不互相吸引', Math.abs(diff1 - diff0) < 6, diff0.toFixed(1) + ' → ' + diff1.toFixed(1));
 check('超出半径的同级基本不动', Math.abs(edge1 - edge0) < 6, edge0.toFixed(1) + ' → ' + edge1.toFixed(1));
 
+/* 自选下一块的显示名（小 → 大），只改标签 */
+const PICK_NAMES = ['奶蛋', '小奶娃', '奶鼠', '奶鸡', '奶狗', '奶马', '奶兔', '大奶娃', '奶天使', '大笑奶龙', '圣奶龙'];
+const gotNames = U.FRUITS.map((f) => f.name);
+check('自选档位名称按顺序是奶蛋到圣奶龙', gotNames.length === 11 && gotNames.every((n, i) => n === PICK_NAMES[i]), gotNames.join('、'));
+
 /* 自选下一块 */
 C.attract = false;
 C.pick = true;
