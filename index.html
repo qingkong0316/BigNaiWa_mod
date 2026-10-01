@@ -22,22 +22,6 @@
   <section class="stage" id="stage">
     <canvas id="game" aria-label="合成大奶娃游戏区域"></canvas>
 
-    <div class="cheat-dock" id="cheatDock">
-      <div class="cheat-panel" id="cheatPanel" hidden>
-        <p class="cheat-title">作弊菜单</p>
-        <p class="cheat-note">个人改版。打开过任意一项，这一局就不会提交到原作排行榜。</p>
-        <label class="cheat-row"><span>局部引力</span><input id="cheatAttract" type="checkbox"></label>
-        <label class="cheat-row"><span>自选下一块</span><input id="cheatPick" type="checkbox"></label>
-        <div class="cheat-pick" id="cheatPickBox" hidden>
-          <div class="cheat-fruits" id="cheatFruits"></div>
-        </div>
-        <label class="cheat-row"><span>锁定拖动</span><input id="cheatLock" type="checkbox"></label>
-        <p class="cheat-hint" id="cheatLockHint" hidden>点一下棋盘上的球锁定，拖动挪位。再点同一颗，或点空白处，取消锁定。</p>
-        <label class="cheat-row"><span>暂停警戒</span><input id="cheatPause" type="checkbox"></label>
-      </div>
-      <button class="cheat-toggle" id="cheatToggle" type="button" aria-expanded="false" aria-controls="cheatPanel">作弊</button>
-    </div>
-
     <div class="overlay" id="overlay">
       <div class="dialog">
         <div class="dialog-emoji">🍉</div>
@@ -105,10 +89,26 @@
       </button>
     </div>
 
+    <div class="cheat-dock" id="cheatDock">
+      <button class="cheat-toggle" id="cheatToggle" type="button" aria-expanded="false" aria-controls="cheatPanel">作弊</button>
+      <div class="cheat-panel" id="cheatPanel" hidden>
+        <p class="cheat-title">作弊菜单</p>
+        <p class="cheat-note">个人改版。打开过任意一项，这一局就不会提交到原作排行榜。</p>
+        <label class="cheat-row"><span>局部引力</span><input id="cheatAttract" type="checkbox"></label>
+        <label class="cheat-row"><span>自选下一块</span><input id="cheatPick" type="checkbox"></label>
+        <div class="cheat-pick" id="cheatPickBox" hidden>
+          <div class="cheat-fruits" id="cheatFruits"></div>
+        </div>
+        <label class="cheat-row"><span>锁定拖动</span><input id="cheatLock" type="checkbox"></label>
+        <p class="cheat-hint" id="cheatLockHint" hidden>点一下棋盘上的球锁定，拖动挪位。再点同一颗，或点空白处，取消锁定。</p>
+        <label class="cheat-row"><span>暂停警戒</span><input id="cheatPause" type="checkbox"></label>
+      </div>
+    </div>
+
     <p class="tips">
       鼠标：移动瞄准、点击投放；触屏：拖动瞄准、松手投放。<br>
       ← → 微调位置，空格投放，R 重开。<br>
-      左下角「作弊」是本地改版，开启后不会上原版排行榜。
+      侧栏「作弊」是本地改版，开启后不会上原版排行榜。
     </p>
 
   </aside>

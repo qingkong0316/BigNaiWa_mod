@@ -223,6 +223,11 @@
   const view = { scale: 1, dpr: 1 };
 
   function resizeCanvas() {
+    const panel = (document.querySelector ? document.querySelector('.panel') : null);
+    if (panel) {
+      const h = Math.ceil(panel.getBoundingClientRect().height);
+      if (h > 0) document.documentElement.style.setProperty('--panel-h', h + 'px');
+    }
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1600,7 +1605,10 @@
     installBoardGuard();
     resizeCanvas();
     if (window.ResizeObserver) {
-      new ResizeObserver(resizeCanvas).observe(stage);
+      const watch = new ResizeObserver(resizeCanvas);
+      watch.observe(stage);
+      const panel = (document.querySelector ? document.querySelector('.panel') : null);
+      if (panel) watch.observe(panel);
     }
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 120));
